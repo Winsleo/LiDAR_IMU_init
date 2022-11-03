@@ -50,7 +50,7 @@
 #include "preprocess.h"
 #include <ikd-Tree/ikd_Tree.h>
 #include <LI_init/LI_init.h>
-
+#include <sensor_msgs/point_cloud2_iterator.h>
 #ifndef DEPLOY
 #include "matplotlibcpp.h"
 namespace plt = matplotlibcpp;
@@ -357,20 +357,25 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg) {
     mtx_buffer.lock();
     scan_count++;
     double preprocess_start_time = omp_get_wtime();
-    if (msg->header.stamp.toSec() < last_timestamp_lidar) {
+    double  msg_header_stamp = msg->header.stamp.toSec();
+    if(lidar_type == ROBOSENSE){
+        sensor_msgs::PointCloud2ConstIterator<double> iter_time(*msg,"timestamp");
+        msg_header_stamp = *iter_time;
+    }
+    if (msg_header_stamp < last_timestamp_lidar) {
         ROS_ERROR("lidar loop back, clear Lidar buffer.");
         lidar_buffer.clear();
         time_buffer.clear();
     }
 
-    last_timestamp_lidar = msg->header.stamp.toSec();
+    last_timestamp_lidar = msg_header_stamp;
     if (abs(last_timestamp_imu - last_timestamp_lidar) > 1.0 && !timediff_set_flg && !imu_buffer.empty()) {
         timediff_set_flg = true;
         timediff_imu_wrt_lidar = last_timestamp_imu - last_timestamp_lidar;
         printf("Self sync IMU and LiDAR, HARD time lag is %.10lf \n \n", timediff_imu_wrt_lidar);
     }
 
-    if ((lidar_type == VELO || lidar_type == OUSTER || lidar_type == PANDAR) && cut_frame) {
+    if ((lidar_type == VELO || lidar_type == OUSTER || lidar_type == PANDAR || lidar_type == ROBOSENSE) && cut_frame) {
         deque<PointCloudXYZI::Ptr> ptr;
         deque<double> timestamp_lidar;
         p_pre->process_cut_frame_pcl2(msg, ptr, timestamp_lidar, cut_frame_num, scan_count);
@@ -384,7 +389,7 @@ void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg) {
         PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
         p_pre->process(msg, ptr);
         lidar_buffer.push_back(ptr);
-        time_buffer.push_back(msg->header.stamp.toSec());
+        time_buffer.push_back(msg_header_stamp);
     }
     mtx_buffer.unlock();
     sig_buffer.notify_all();

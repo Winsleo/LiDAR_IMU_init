@@ -130,6 +130,7 @@ Preprocess::process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg
     pl_surf.clear();
     pl_corn.clear();
     pl_full.clear();
+    double msg_header_stamp = msg->header.stamp.toSec();
     if (lidar_type == VELO) {
         pcl::PointCloud<velodyne_ros::Point> pl_orig;
         pcl::fromROSMsg(*msg, pl_orig);
@@ -233,7 +234,7 @@ Preprocess::process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg
             added_pt.y = pl_orig.points[i].y;
             added_pt.z = pl_orig.points[i].z;
             added_pt.intensity = pl_orig.points[i].intensity;
-            added_pt.curvature = (pl_orig.points[i].timestamp - msg->header.stamp.toSec()) * 1000;  //s to ms
+            added_pt.curvature = (pl_orig.points[i].timestamp - msg_header_stamp) * 1000;  //s to ms
 
             double dist = added_pt.x * added_pt.x + added_pt.y * added_pt.y + added_pt.z * added_pt.z;
             if ( dist < blind * blind || isnan(added_pt.x) || isnan(added_pt.y) || isnan(added_pt.z))
@@ -246,6 +247,7 @@ Preprocess::process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg
     } else if(lidar_type == ROBOSENSE){
         pcl::PointCloud<robosense_ros::Point> pl_orig;
         pcl::fromROSMsg(*msg, pl_orig);
+        msg_header_stamp = pl_orig.points[0].timestamp;//robosense的一帧点云起始时间校正
         int plsize = pl_orig.points.size();
         pl_surf.reserve(plsize);
 
@@ -271,7 +273,7 @@ Preprocess::process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg
             added_pt.y = pl_orig.points[i].y;
             added_pt.z = pl_orig.points[i].z;
             added_pt.intensity = pl_orig.points[i].intensity;
-            added_pt.curvature = (pl_orig.points[i].timestamp - pl_orig.points[0].timestamp)* 1000.0;  //ms
+            added_pt.curvature = (pl_orig.points[i].timestamp - msg_header_stamp)* 1000.0;  //ms
 
             double dist = added_pt.x * added_pt.x + added_pt.y * added_pt.y + added_pt.z * added_pt.z;
             if ( dist < blind * blind || has_nan(added_pt)){
@@ -316,7 +318,7 @@ Preprocess::process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg
     sort(pl_surf.points.begin(), pl_surf.points.end(), time_list_cut_frame);
 
     //ms
-    double last_frame_end_time = msg->header.stamp.toSec() * 1000;
+    double last_frame_end_time = msg_header_stamp * 1000;
     uint valid_num = 0;
     uint cut_num = 0;
     uint valid_pcl_size = pl_surf.points.size();
@@ -330,7 +332,7 @@ Preprocess::process_cut_frame_pcl2(const sensor_msgs::PointCloud2::ConstPtr &msg
     PointCloudXYZI pcl_cut;
     for (uint i = 1; i < valid_pcl_size; i++) {
         valid_num++;
-        pl_surf[i].curvature += msg->header.stamp.toSec() * 1000 - last_frame_end_time;
+        pl_surf[i].curvature += msg_header_stamp * 1000 - last_frame_end_time;
         pcl_cut.push_back(pl_surf[i]);
 
         if (valid_num == (int((cut_num + 1) * valid_pcl_size / required_cut_num) - 1)) {
